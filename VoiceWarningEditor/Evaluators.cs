@@ -128,22 +128,12 @@ namespace VoiceWarningEditor
         {
             try
             {
-                // only warn if craft has a fuel tank
+                // only warn if craft has a fuel system
                 var resources = craft.resources;
-                if (resources == null || resources.fuelTanks == null || resources.fuelTanks.Count == 0)
+                if (resources == null || resources.fuelSystems == null || resources.fuelSystems.Count == 0)
                     return;
 
-                float totalCapacity = 0f;
-                float totalFuel = 0f;
-                foreach (var tank in resources.fuelTanks)
-                {
-                    if (tank == null) continue;
-                    totalCapacity += tank.Capacity;
-                    totalFuel += tank.Fuel;
-                }
-                if (totalCapacity <= 0f) return;
-
-                float fuelFraction = totalFuel / totalCapacity;
+                float fuelFraction = GetFuelFraction(craft);
                 _eventValues[WarningEvent.CriticalFuel] = fuelFraction;
                 _eventValues[WarningEvent.BingoFuel] = fuelFraction;
 
