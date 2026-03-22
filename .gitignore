@@ -1,0 +1,44 @@
+# build output
+bin/
+obj/
+*.dll
+*.pdb
+*.exe
+
+# IDE / editor
+.vs/
+.vscode/
+*.user
+*.suo
+*.userprefs
+*.csproj.user
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# backup files
+*.bak
+*.tmp
+*.swp
+*~
+
+# NuGet
+*.nupkg
+packages/
+
+# Rider
+.idea/
+
+# il2cpp dumps
+dump.cs
+script.json
+stringliteral.json
+
+# raw assets
+*.png
+
+# packaging
+*.zip
+*.tar.gz
