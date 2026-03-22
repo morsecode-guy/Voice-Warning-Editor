@@ -8,6 +8,8 @@ namespace VoiceWarningEditor
     // evaluators for all the warning conditions
     public partial class VoiceWarningEditorMod
     {
+        // cache for last known part healths to detect new damage
+        private Dictionary<int, float> _lastPartHealth = new Dictionary<int, float>();
         // any wheel touching ground?
         private bool AreWheelsGrounded(Craft craft)
         {
@@ -126,13 +128,31 @@ namespace VoiceWarningEditor
         {
             try
             {
-                float fuelFraction = GetFuelFraction(craft);
+                // only warn if craft has a fuel tank
+                var resources = craft.resources;
+                if (resources == null || resources.fuelTanks == null || resources.fuelTanks.Count == 0)
+                    return;
+
+                float totalCapacity = 0f;
+                float totalFuel = 0f;
+                foreach (var tank in resources.fuelTanks)
+                {
+                    if (tank == null) continue;
+                    totalCapacity += tank.Capacity;
+                    totalFuel += tank.Fuel;
+                }
+                if (totalCapacity <= 0f) return;
+
+                float fuelFraction = totalFuel / totalCapacity;
                 _eventValues[WarningEvent.CriticalFuel] = fuelFraction;
                 _eventValues[WarningEvent.BingoFuel] = fuelFraction;
 
                 float bingThreshold = DEFAULT_BINGO_FUEL_FRACTION;
                 try { if (cmd != null && cmd.warnings != null && cmd.warnings.bingo > 0) bingThreshold = cmd.warnings.bingo; }
                 catch { }
+
+                // don't warn if tank is basically full
+                if (fuelFraction > 0.99f) return;
 
                 if (fuelFraction <= DEFAULT_CRITICAL_FUEL_FRACTION && fuelFraction >= 0f)
                     _activeEvents.Add(WarningEvent.CriticalFuel);
@@ -269,7 +289,7 @@ namespace VoiceWarningEditor
                 if (parts == null) return;
 
                 bool hasFire = false;
-                bool hasDamage = false;
+                bool newDamage = false;
 
                 for (int i = 0; i < parts.Count; i++)
                 {
@@ -286,20 +306,32 @@ namespace VoiceWarningEditor
                     }
                     catch { }
 
-                    // only trigger master caution for actually destroyed parts
-                    // 0.5 was way too sensitive, lots of parts sit below that normally
                     try
                     {
                         var part = parts[i].GetComponent<Part>();
-                        if (part != null && part.health < 0.2f && part.health > 0f)
-                            hasDamage = true;
+                        if (part != null)
+                        {
+                            int id = parts[i].GetInstanceID();
+                            float currHealth = part.health;
+                            // Initialize cache if missing (first run after spawn)
+                            if (!_lastPartHealth.ContainsKey(id))
+                            {
+                                _lastPartHealth[id] = currHealth;
+                                continue; // don't trigger on spawn
+                            }
+                            float prevHealth = _lastPartHealth[id];
+                            // Only trigger if health just dropped below threshold
+                            if (currHealth < 0.2f && prevHealth >= 0.2f && currHealth > 0f)
+                                newDamage = true;
+                            _lastPartHealth[id] = currHealth;
+                        }
                     }
                     catch { }
                 }
 
                 if (hasFire)
                     _activeEvents.Add(WarningEvent.EngineFire);
-                else if (hasDamage)
+                else if (newDamage)
                     _activeEvents.Add(WarningEvent.BattleDamage);
             }
             catch { }
@@ -363,22 +395,24 @@ namespace VoiceWarningEditor
                 var gears = UnityEngine.Object.FindObjectsOfType<LandingGear>();
                 if (gears == null || gears.Count == 0) return;
 
-                bool anyRetracted = false;
-                bool hasRetractable = false;
-
+                int retractable = 0;
+                int retracted = 0;
+                int down = 0;
                 for (int i = 0; i < gears.Count; i++)
                 {
                     if (gears[i] == null) continue;
                     if (!gears[i].retractable) continue;
-                    hasRetractable = true;
-                    if (gears[i].gearRetracted)
-                    {
-                        anyRetracted = true;
-                        break;
-                    }
+                    retractable++;
+                    if (gears[i].gearRetracted) retracted++;
+                    else down++;
                 }
+                if (retractable == 0) return;
 
-                if (hasRetractable && anyRetracted)
+                if (retracted == retractable)
+                    _activeEvents.Add(WarningEvent.GearUp);
+                if (down == retractable)
+                    _activeEvents.Add(WarningEvent.GearDown);
+                if (retracted > 0 && down > 0)
                     _activeEvents.Add(WarningEvent.GearNotDown);
             }
             catch { }
@@ -618,8 +652,12 @@ namespace VoiceWarningEditor
         // register an input event with its value
         private void SetInputEvent(WarningEvent evt, float value)
         {
-            _activeEvents.Add(evt);
-            _eventValues[evt] = value;
+            // only set if value is significant (avoid random noise)
+            if (Math.Abs(value) > 0.01f)
+            {
+                _activeEvents.Add(evt);
+                _eventValues[evt] = value;
+            }
         }
     }
 }

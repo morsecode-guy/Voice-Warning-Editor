@@ -22,6 +22,8 @@ namespace VoiceWarningEditor
         GeneratorFailure,
         HydraulicFailure,
         GearNotDown,
+        GearUp,      // all retractable gear up
+        GearDown,    // all retractable gear down
         MissileIncoming,
         RadarLock,
         // built-in craft inputs
