@@ -1,0 +1,12 @@
+/home/morse-code-guy/Documents/VoiceWarningSystem/VoiceWarningEditor/bin/Debug/net6.0/VoiceWarningEditor.deps.json
+/home/morse-code-guy/Documents/VoiceWarningSystem/VoiceWarningEditor/bin/Debug/net6.0/VoiceWarningEditor.dll
+/home/morse-code-guy/Documents/VoiceWarningSystem/VoiceWarningEditor/bin/Debug/net6.0/ref/VoiceWarningEditor.dll
+/home/morse-code-guy/Documents/VoiceWarningSystem/VoiceWarningEditor/bin/Debug/net6.0/VoiceWarningEditor.pdb
+/home/morse-code-guy/Documents/VoiceWarningSystem/VoiceWarningEditor/obj/Debug/net6.0/VoiceWarningEditor.csproj.AssemblyReference.cache
+/home/morse-code-guy/Documents/VoiceWarningSystem/VoiceWarningEditor/obj/Debug/net6.0/VoiceWarningEditor.GeneratedMSBuildEditorConfig.editorconfig
+/home/morse-code-guy/Documents/VoiceWarningSystem/VoiceWarningEditor/obj/Debug/net6.0/VoiceWarningEditor.AssemblyInfoInputs.cache
+/home/morse-code-guy/Documents/VoiceWarningSystem/VoiceWarningEditor/obj/Debug/net6.0/VoiceWarningEditor.AssemblyInfo.cs
+/home/morse-code-guy/Documents/VoiceWarningSystem/VoiceWarningEditor/obj/Debug/net6.0/VoiceWarningEditor.csproj.CoreCompileInputs.cache
+/home/morse-code-guy/Documents/VoiceWarningSystem/VoiceWarningEditor/obj/Debug/net6.0/VoiceWarningEditor.dll
+/home/morse-code-guy/Documents/VoiceWarningSystem/VoiceWarningEditor/obj/Debug/net6.0/ref/VoiceWarningEditor.dll
+/home/morse-code-guy/Documents/VoiceWarningSystem/VoiceWarningEditor/obj/Debug/net6.0/VoiceWarningEditor.pdb

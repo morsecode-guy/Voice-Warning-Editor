@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "dgSpecHash": "jn3hK2DRfA+AV5lmw27IptZpJ9pmCtNreR/divDzzGLp5EBElLgGm+UZoQQjteIr8druN7+n+N4UhMBI/OPF/A==",
+  "success": true,
+  "projectFilePath": "/home/morse-code-guy/Documents/VoiceWarningSystem/VoiceWarningEditor/VoiceWarningEditor.csproj",
+  "expectedPackageFiles": [
+    "/home/morse-code-guy/.nuget/packages/microsoft.aspnetcore.app.ref/6.0.36/microsoft.aspnetcore.app.ref.6.0.36.nupkg.sha512"
+  ],
+  "logs": []
+}
