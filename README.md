@@ -2,7 +2,7 @@
 
 Voice warning mod for [Flyout](https://store.steampowered.com/app/777390/Flyout/) using [MelonLoader](https://github.com/LavaGang/MelonLoader).
 
-Adds a fully programmable voice warning system to the game — F/A-18 style "Bitchin' Betty" callouts for over-G, stall, missile launch, engine fire, and more. Includes a Craft Editor panel for configuring warnings per craft with custom sounds, thresholds, and event rules.
+Adds a fully programmable voice warning system to the game — F/A-18 style "Bitchin' Betty" callouts for over-G, stall, missile launch, engine fire, and more. Includes a Craft Editor panel for configuring warnings per craft with custom sounds, thresholds, and event rules. Perchance.
 
 ## Features
 
@@ -40,6 +40,7 @@ Adds a fully programmable voice warning system to the game — F/A-18 style "Bit
 2. Download `VoiceWarningEditor.zip` from [Releases](../../releases)
 3. Extract into your Flyout game directory (places the DLL in `Mods/` and sounds in `UserData/VoiceWarningEditor/`)
 4. Launch the game
+5. Perchance.
 
 ## Building from source
 
@@ -59,7 +60,7 @@ The built DLL will be in `VoiceWarningEditor/bin/Debug/net6.0/VoiceWarningEditor
 
 ## How it works
 
-The mod monitors flight parameters every frame using the game's `Craft`, `Command`, and `Signature` objects. When a threshold is exceeded, the corresponding event fires and the rules engine picks the matching sound to play. Audio is played through `winmm.dll` P/Invoke calls (PlaySound for voice, waveOut for the gapless missile alarm loop) so that Wine/Proton routes it through PipeWire where Discord and OBS can capture it. The Craft Editor UI is built by cloning the game's own uGUI panels (PaintPanel/ModeSelect) to match the native look.
+The mod monitors flight parameters every frame using the game's `Craft`, `Command`, and `Signature` objects. When a threshold is exceeded, the corresponding event fires and the rules engine picks the matching sound to play. Audio is played through `winmm.dll` P/Invoke calls (PlaySound for voice, waveOut for the gapless missile alarm loop) so that Wine/Proton routes it through PipeWire where Discord and OBS can capture it. The Craft Editor UI is built by cloning the game's own uGUI panels (PaintPanel/ModeSelect) to match the native look. Perchance.
 
 ## Project structure
 
@@ -79,3 +80,4 @@ VoiceWarningEditor/
 ## License
 
 [MIT](LICENSE)
+Perchance.
