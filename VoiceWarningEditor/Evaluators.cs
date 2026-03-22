@@ -150,10 +150,16 @@ namespace VoiceWarningEditor
                 if (!IsInFlight(craft, cmd)) return;
                 if (craft.altitude < 50f) return;
 
+                // dont stall-warn vtol/helo craft that are basically hovering
+                // or any craft moving slowly near the ground
+                if (craft.radarAlt < 100f && craft.velocity.magnitude < 40f)
+                    return;
+
                 float ias = cmd.ias;
                 _eventValues[WarningEvent.Stall] = ias;
 
-                if (ias > 0 && ias < DEFAULT_CRITICAL_SPEED)
+                // only warn if actually moving-ish but too slow for sustained flight
+                if (ias > 5f && ias < DEFAULT_CRITICAL_SPEED)
                     _activeEvents.Add(WarningEvent.Stall);
             }
             catch { }
@@ -209,10 +215,15 @@ namespace VoiceWarningEditor
         // engine and systems checks
 
         // turbine spool condition or flameout
+        // only fires in flight to avoid false positives on the ground
         private void EvaluateEngineFailure(Craft craft)
         {
             try
             {
+                // dont yell about engines on the ground
+                if (craft.radarAlt < 20f && craft.velocity.magnitude < 30f)
+                    return;
+
                 var turbines = craft.turbines;
                 if (turbines == null) return;
 
@@ -221,32 +232,28 @@ namespace VoiceWarningEditor
                     var turbine = turbines[i];
                     if (turbine == null) continue;
 
+                    // skip engines that arent running (throttle near zero)
+                    if (turbine.mainThrottle < 0.15f) continue;
+
                     // lost ignition while throttle is up
-                    if (!turbine.ignition && turbine.mainThrottle > 0.1f)
+                    if (!turbine.ignition && turbine.mainThrottle > 0.3f)
                     {
                         _activeEvents.Add(WarningEvent.EngineFailure);
                         return;
                     }
 
-                    // compressor degraded
+                    // compressor severely degraded (not just a little worn)
                     var spools = turbine.spool;
                     if (spools != null)
                     {
                         for (int j = 0; j < spools.Length; j++)
                         {
-                            if (spools[j] != null && spools[j].compCondition < DEFAULT_ENGINE_COMP_CONDITION)
+                            if (spools[j] != null && spools[j].compCondition < 0.3f)
                             {
                                 _activeEvents.Add(WarningEvent.EngineFailure);
                                 return;
                             }
                         }
-                    }
-
-                    // thrust died while throttle is up
-                    if (turbine.mainThrottle > 0.3f && turbine.netThrust < 50f)
-                    {
-                        _activeEvents.Add(WarningEvent.EngineFailure);
-                        return;
                     }
                 }
             }
@@ -279,10 +286,12 @@ namespace VoiceWarningEditor
                     }
                     catch { }
 
+                    // only trigger master caution for actually destroyed parts
+                    // 0.5 was way too sensitive, lots of parts sit below that normally
                     try
                     {
                         var part = parts[i].GetComponent<Part>();
-                        if (part != null && part.health < 0.5f)
+                        if (part != null && part.health < 0.2f && part.health > 0f)
                             hasDamage = true;
                     }
                     catch { }

@@ -1335,10 +1335,13 @@ namespace VoiceWarningEditor
                     }
 
                     _craftOverrides[clipName] = Path.GetFullPath(destPath);
+                    // file on disk changed, dump the stale cached AudioClip
+                    InvalidateClipCache(Path.GetFullPath(destPath));
                 }
                 else
                 {
                     _craftOverrides[clipName] = Path.GetFullPath(selectedPath);
+                    InvalidateClipCache(Path.GetFullPath(selectedPath));
                 }
 
                 LoggerInstance.Msg($"[CraftEditor] Override set for '{clipName}': {_craftOverrides[clipName]}");

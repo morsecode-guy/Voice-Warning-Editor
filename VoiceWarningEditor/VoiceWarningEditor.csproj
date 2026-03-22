@@ -113,6 +113,11 @@
       <HintPath>$(GameDir)/MelonLoader/Il2CppAssemblies/Il2CppSimpleFileBrowser.Runtime.dll</HintPath>
       <Private>false</Private>
     </Reference>
+
+    <Reference Include="Unity.InputSystem">
+      <HintPath>$(GameDir)/MelonLoader/Il2CppAssemblies/Unity.InputSystem.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
 
   <!-- Copy output to Mods folder -->

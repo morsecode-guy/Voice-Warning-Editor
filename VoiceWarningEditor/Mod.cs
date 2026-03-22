@@ -10,7 +10,7 @@ using Il2Cpp;
 using Il2CppTMPro;
 using Il2CppCraftEditor;
 
-[assembly: MelonInfo(typeof(VoiceWarningEditor.VoiceWarningEditorMod), "Voice Warning Editor", "1.0.1", "Morse Code Guy")]
+[assembly: MelonInfo(typeof(VoiceWarningEditor.VoiceWarningEditorMod), "Voice Warning Editor", "1.1.0", "Morse Code Guy")]
 [assembly: MelonGame("Stonext Games", "Flyout")]
 
 namespace VoiceWarningEditor
@@ -371,18 +371,10 @@ namespace VoiceWarningEditor
                 LoggerInstance.Msg($"Created per-craft config folder at: {_craftConfigBasePath}");
             }
 
-            // check if winmm works
-            try
-            {
-                PlaySound(null, IntPtr.Zero, SND_PURGE);
-                LoggerInstance.Msg("Audio: winmm.dll available for in-process playback");
-            }
-            catch (Exception ex)
-            {
-                LoggerInstance.Error($"Audio: winmm.dll not available: {ex.Message}");
-            }
+            // set up audio backend (winmm on linux/wine, unity on windows)
+            InitAudioBackend();
 
-            LoggerInstance.Msg("Voice Warning Editor v3.0.0 initialized.");
+            LoggerInstance.Msg("Voice Warning Editor v1.1.0 initialized.");
             LoggerInstance.Msg($"Sound folder: {_dataFolderPath}");
             LoggerInstance.Msg($"Per-craft overrides: {_craftConfigBasePath}");
             LoggerInstance.Msg("Open CraftEditor → click VWS button to customize sounds per-craft.");
@@ -490,6 +482,22 @@ namespace VoiceWarningEditor
                 }
                 catch { }
             }
+
+            // tilde key toggles mute (new input system)
+            try
+            {
+                var kb = UnityEngine.InputSystem.Keyboard.current;
+                if (kb != null && kb.backquoteKey.wasPressedThisFrame)
+                    ToggleMute();
+            }
+            catch { }
+
+            // try to link our audio to the game's mixer
+            TryLinkMixerGroup();
+
+            // tick notification timer
+            if (_notificationTimer > 0f)
+                _notificationTimer -= Time.deltaTime;
 
             // test sound on menu load
             if (_testSoundPending)
@@ -623,6 +631,11 @@ namespace VoiceWarningEditor
 
             // check rules
             EvaluateEventRules();
+        }
+
+        public override void OnGUI()
+        {
+            DrawNotification();
         }
     }
 }
