@@ -513,7 +513,12 @@ namespace VoiceWarningEditor
                     _activeEvents.Add(WarningEvent.MissileIncoming);
 
                 if (guidedAtUs > 0 && !_missileAlarmPlaying)
-                    StartMissileAlarm();
+                {
+                    if (_suppressMissileAlarm)
+                        LoggerInstance.Msg("[Missile] Missile alarm suppressed (debug mode)");
+                    else
+                        StartMissileAlarm();
+                }
                 else if (guidedAtUs == 0 && _missileAlarmPlaying)
                     StopMissileAlarm();
 

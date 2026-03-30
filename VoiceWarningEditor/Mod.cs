@@ -211,6 +211,8 @@ namespace VoiceWarningEditor
         private int _prevMissileCount;
         private bool _wasRadarLocked;
         internal bool _missileAlarmPlaying;
+            // emergency flag: suppress missile alarm playback to debug missile behavior
+            internal bool _suppressMissileAlarm = true;
         internal IntPtr _waveOutHandle;
         internal IntPtr _waveHdrPtr;
         internal IntPtr _pcmDataPtr;
