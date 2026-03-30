@@ -570,21 +570,41 @@ namespace VoiceWarningEditor
                     try { isLocked = cmd.heatLocked; } catch { }
                 }
 
-                // fallback: sam sites nearby
+                // fallback: sam sites nearby (use string Type lookup to avoid TypeLoadException on mismatched game versions)
                 if (!isLocked)
                 {
                     try
                     {
-                        var sams = UnityEngine.Object.FindObjectsOfType<AISam>();
-                        if (sams != null)
+                        // scan all GameObjects and look for components named 'AISam' to avoid direct type references
+                        var gos = UnityEngine.Object.FindObjectsOfType<GameObject>();
+                        if (gos != null)
                         {
-                            for (int i = 0; i < sams.Count; i++)
+                            for (int gi = 0; gi < gos.Length; gi++)
                             {
-                                if (sams[i] == null) continue;
+                                var go = gos[gi];
+                                if (go == null) continue;
                                 try
                                 {
-                                    float dist = Vector3.Distance(sams[i].transform.position, craft.transform.position);
-                                    if (dist < 20000f) { isLocked = true; break; }
+                                    var comps = go.GetComponents<Component>();
+                                    if (comps == null) continue;
+                                    for (int ci = 0; ci < comps.Length; ci++)
+                                    {
+                                        var comp = comps[ci];
+                                        if (comp == null) continue;
+                                        string tname = null;
+                                        try { tname = comp.GetType().Name; } catch { }
+                                        if (string.IsNullOrEmpty(tname)) continue;
+                                        if (tname.Equals("AISam", StringComparison.Ordinal) || tname.EndsWith("AISam", StringComparison.Ordinal))
+                                        {
+                                            try
+                                            {
+                                                float dist = Vector3.Distance(go.transform.position, craft.transform.position);
+                                                if (dist < 20000f) { isLocked = true; break; }
+                                            }
+                                            catch { }
+                                        }
+                                    }
+                                    if (isLocked) break;
                                 }
                                 catch { }
                             }
