@@ -10,7 +10,7 @@ using Il2Cpp;
 using Il2CppTMPro;
 using Il2CppCraftEditor;
 
-[assembly: MelonInfo(typeof(VoiceWarningEditor.VoiceWarningEditorMod), "Voice Warning Editor", "1.1.0", "Morse Code Guy")]
+[assembly: MelonInfo(typeof(VoiceWarningEditor.VoiceWarningEditorMod), "Voice Warning Editor", "1.1.1", "Morse Code Guy")]
 [assembly: MelonGame("Stonext Games", "Flyout")]
 
 namespace VoiceWarningEditor
@@ -210,9 +210,12 @@ namespace VoiceWarningEditor
         // missile alarm stuff >:(
         private int _prevMissileCount;
         private bool _wasRadarLocked;
+        private bool _missileThreatActive;
+        private bool _radarLockActive;
+        private string _activeThreatLoopClip;
         internal bool _missileAlarmPlaying;
-            // emergency flag: suppress missile alarm playback to debug missile behavior
-            internal bool _suppressMissileAlarm = true;
+        // debug flag kept for troubleshooting; disabled by default
+        internal bool _suppressMissileAlarm = false;
         internal IntPtr _waveOutHandle;
         internal IntPtr _waveHdrPtr;
         internal IntPtr _pcmDataPtr;
@@ -376,7 +379,7 @@ namespace VoiceWarningEditor
             // set up audio backend (winmm on linux/wine, unity on windows)
             InitAudioBackend();
 
-            LoggerInstance.Msg("Voice Warning Editor v1.1.0 initialized.");
+            LoggerInstance.Msg("Voice Warning Editor v1.1.1 initialized.");
             LoggerInstance.Msg($"Sound folder: {_dataFolderPath}");
             LoggerInstance.Msg($"Per-craft overrides: {_craftConfigBasePath}");
             LoggerInstance.Msg("Open CraftEditor → click VWS button to customize sounds per-craft.");
@@ -496,6 +499,7 @@ namespace VoiceWarningEditor
 
             // try to link our audio to the game's mixer
             TryLinkMixerGroup();
+            UpdateBackendVolume();
 
             // tick notification timer
             if (_notificationTimer > 0f)

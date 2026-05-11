@@ -22,6 +22,9 @@ namespace VoiceWarningEditor
         // mute toggle
         private bool _vwsMuted;
         private bool _mixerGroupLinked;
+        private float _lastBackendVolume = -1f;
+        private float _nextVolumeSyncTime;
+        private const float VOLUME_SYNC_INTERVAL = 0.10f;
 
         // on-screen notification
         private float _notificationTimer;
@@ -55,7 +58,7 @@ namespace VoiceWarningEditor
             _useWinmm = DetectWine();
             if (_useWinmm)
             {
-                LoggerInstance.Msg("[Audio] Using winmm (Wine/Proton) for playback");
+                LoggerInstance.Msg("[Audio] Wine/Proton detected: using Unity mixer-first playback (winmm fallback)");
                 try
                 {
                     PlaySound(null, IntPtr.Zero, SND_PURGE);
@@ -65,6 +68,9 @@ namespace VoiceWarningEditor
                 {
                     LoggerInstance.Error($"[Audio] winmm.dll not available: {ex.Message}");
                 }
+
+                // Always create Unity sources so Master Volume/mixer routing works on Wine/Proton too.
+                SetupUnityAudio();
             }
             else
             {
@@ -104,7 +110,7 @@ namespace VoiceWarningEditor
         // link our audio sources to the game's mixer so they follow the volume slider
         private void TryLinkMixerGroup()
         {
-            if (_mixerGroupLinked || _useWinmm) return;
+            if (_mixerGroupLinked) return;
             try
             {
                 var mgr = AudioManager.instance;
@@ -118,6 +124,81 @@ namespace VoiceWarningEditor
                 LoggerInstance.Msg("[Audio] Linked VWS audio to game mixer group");
             }
             catch { }
+        }
+
+        // keep backend output scaled to game master volume
+        private void UpdateBackendVolume()
+        {
+            if (Time.realtimeSinceStartup < _nextVolumeSyncTime) return;
+            _nextVolumeSyncTime = Time.realtimeSinceStartup + VOLUME_SYNC_INTERVAL;
+
+            float target = GetGameMasterVolume();
+            if (_vwsMuted) target = 0f;
+            target = Mathf.Clamp01(target);
+
+            if (Mathf.Abs(target - _lastBackendVolume) < 0.01f)
+                return;
+
+            _lastBackendVolume = target;
+
+            try
+            {
+                if (_voiceSource != null) _voiceSource.volume = target;
+                if (_alarmSource != null) _alarmSource.volume = target;
+
+                if (_useWinmm)
+                {
+                    uint perChannel = (uint)Mathf.Clamp(Mathf.RoundToInt(target * 65535f), 0, 65535);
+                    uint packed = perChannel | (perChannel << 16);
+                    waveOutSetVolume(_waveOutHandle != IntPtr.Zero ? _waveOutHandle : IntPtr.Zero, packed);
+                }
+            }
+            catch { }
+        }
+
+        // resolve master volume with soft reflection to stay compatible across game updates
+        private float GetGameMasterVolume()
+        {
+            try
+            {
+                var mgr = AudioManager.instance;
+                if (mgr == null) return 1f;
+
+                var t = mgr.GetType();
+                string[] names = { "masterVolume", "MasterVolume", "Volume", "volume", "sfxVolume", "musicVolume" };
+
+                for (int i = 0; i < names.Length; i++)
+                {
+                    string name = names[i];
+
+                    try
+                    {
+                        var prop = t.GetProperty(name);
+                        if (prop != null)
+                        {
+                            object val = prop.GetValue(mgr, null);
+                            if (val is float f) return f;
+                            if (val is double d) return (float)d;
+                        }
+                    }
+                    catch { }
+
+                    try
+                    {
+                        var field = t.GetField(name);
+                        if (field != null)
+                        {
+                            object val = field.GetValue(mgr);
+                            if (val is float f) return f;
+                            if (val is double d) return (float)d;
+                        }
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+
+            return 1f;
         }
 
         // toggle mute on/off
@@ -342,16 +423,31 @@ namespace VoiceWarningEditor
 
             if (_useWinmm)
             {
+                // Prefer Unity path when available so mixer/master volume controls this mod.
                 try
                 {
+                    if (_voiceSource != null)
+                    {
+                        var clip = GetUnityClip(clipName, filePath);
+                        if (clip != null)
+                        {
+                            _voiceSource.clip = clip;
+                            _voiceSource.Play();
+                            _lastPlayTime = Time.realtimeSinceStartup;
+                            _currentClipLength = duration;
+                            LoggerInstance.Msg($"[Play/Unity] '{clipName}' ({duration:F2}s) [{source}]");
+                            return;
+                        }
+                    }
+
                     bool result = PlaySound(filePath, IntPtr.Zero, SND_FILENAME | SND_ASYNC | SND_NODEFAULT);
                     _lastPlayTime = Time.realtimeSinceStartup;
                     _currentClipLength = duration;
-                    LoggerInstance.Msg($"[Play/winmm] '{clipName}' ({duration:F2}s) [{source}] result={result}");
+                    LoggerInstance.Msg($"[Play/winmm-fallback] '{clipName}' ({duration:F2}s) [{source}] result={result}");
                 }
                 catch (Exception ex)
                 {
-                    LoggerInstance.Error($"[Play/winmm] Failed '{clipName}': {ex.GetType().Name}: {ex.Message}");
+                    LoggerInstance.Error($"[Play] Failed '{clipName}': {ex.GetType().Name}: {ex.Message}");
                 }
             }
             else
@@ -382,13 +478,11 @@ namespace VoiceWarningEditor
         // stop current sound
         private void StopCurrentAudio()
         {
+            try { if (_voiceSource != null) _voiceSource.Stop(); } catch { }
+
             if (_useWinmm)
             {
                 try { PlaySound(null, IntPtr.Zero, SND_PURGE); } catch { }
-            }
-            else
-            {
-                try { if (_voiceSource != null) _voiceSource.Stop(); } catch { }
             }
         }
 
@@ -406,7 +500,7 @@ namespace VoiceWarningEditor
         // check if something is still playing
         internal bool IsAudioPlaying()
         {
-            if (!_useWinmm && _voiceSource != null)
+            if (_voiceSource != null)
                 return _voiceSource.isPlaying;
             return Time.realtimeSinceStartup - _lastPlayTime < _currentClipLength;
         }
@@ -442,44 +536,56 @@ namespace VoiceWarningEditor
             _warningCooldowns[clipName] = cooldown;
         }
 
-        // gapless missile alarm, different backends per platform
-        internal void StartMissileAlarm()
+        // gapless threat loop alarm, different backends per platform
+        internal void StartThreatAlarm(string clipName)
         {
             if (_vwsMuted) return;
-            if (_missileAlarmPlaying) return;
-
-            string filePath = GetSoundPath("missile_lauch_f18");
+            string filePath = GetSoundPath(clipName);
             if (filePath == null) return;
 
-            if (_useWinmm)
-                StartMissileAlarmWaveOut(filePath);
-            else
-                StartMissileAlarmUnity(filePath);
+            // if already playing same loop, keep it running
+            if (_missileAlarmPlaying && string.Equals(_activeThreatLoopClip, clipName, StringComparison.Ordinal))
+                return;
+
+            // switch loops cleanly when threat priority changes
+            if (_missileAlarmPlaying)
+                StopMissileAlarm();
+
+            if (_alarmSource != null)
+                StartThreatAlarmUnity(filePath, clipName);
+            else if (_useWinmm)
+                StartThreatAlarmWaveOut(filePath, clipName);
+        }
+
+        internal void StartMissileAlarm()
+        {
+            StartThreatAlarm("missile_lauch_f18");
         }
 
         // unity looping alarm for windows
-        private void StartMissileAlarmUnity(string filePath)
+        private void StartThreatAlarmUnity(string filePath, string clipName)
         {
             try
             {
-                var clip = GetUnityClip("missile_lauch_f18", filePath);
+                var clip = GetUnityClip(clipName, filePath);
                 if (clip != null && _alarmSource != null)
                 {
                     _alarmSource.clip = clip;
                     _alarmSource.loop = true;
                     _alarmSource.Play();
                     _missileAlarmPlaying = true;
-                    LoggerInstance.Msg("[Audio/Unity] Missile alarm started (looping)");
+                    _activeThreatLoopClip = clipName;
+                    LoggerInstance.Msg($"[Audio/Unity] Threat loop started: '{clipName}'");
                 }
             }
             catch (Exception ex)
             {
-                LoggerInstance.Error($"[Audio/Unity] Missile alarm error: {ex.Message}");
+                LoggerInstance.Error($"[Audio/Unity] Threat loop error: {ex.Message}");
             }
         }
 
         // waveout hardware loop for linux/wine >:(
-        private void StartMissileAlarmWaveOut(string filePath)
+        private void StartThreatAlarmWaveOut(string filePath, string clipName)
         {
             try
             {
@@ -568,11 +674,12 @@ namespace VoiceWarningEditor
                 }
 
                 _missileAlarmPlaying = true;
-                LoggerInstance.Msg($"[waveOut] Missile alarm started ({channels}ch {sampleRate}Hz {bitsPerSample}bit, {dataSize}B)");
+                _activeThreatLoopClip = clipName;
+                LoggerInstance.Msg($"[waveOut] Threat loop started: '{clipName}' ({channels}ch {sampleRate}Hz {bitsPerSample}bit, {dataSize}B)");
             }
             catch (Exception ex)
             {
-                LoggerInstance.Error($"[waveOut] Missile alarm error: {ex.Message}");
+                LoggerInstance.Error($"[waveOut] Threat loop error: {ex.Message}");
                 CleanupWaveOut();
             }
         }
@@ -607,6 +714,7 @@ namespace VoiceWarningEditor
                 catch { }
             }
             _missileAlarmPlaying = false;
+            _activeThreatLoopClip = null;
         }
 
         // free unmanaged memory

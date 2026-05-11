@@ -10,6 +10,12 @@ namespace VoiceWarningEditor
     {
         // cache for last known part healths to detect new damage
         private Dictionary<int, float> _lastPartHealth = new Dictionary<int, float>();
+        // throttle expensive world scans to avoid frame spikes
+        private float _nextMissileThreatScanTime;
+        private float _nextSamFallbackScanTime;
+        private bool _cachedSamFallbackLock;
+        private const float MISSILE_SCAN_INTERVAL = 0.12f;
+        private const float SAM_SCAN_INTERVAL = 1.0f;
         // any wheel touching ground?
         private bool AreWheelsGrounded(Craft craft)
         {
@@ -415,7 +421,16 @@ namespace VoiceWarningEditor
         {
             try
             {
-                int guidedAtUs = 0;
+                int previousGuided = _prevMissileCount;
+                int guidedAtUs = previousGuided;
+                float now = Time.realtimeSinceStartup;
+                bool runScan = now >= _nextMissileThreatScanTime;
+                if (runScan)
+                {
+                    _nextMissileThreatScanTime = now + MISSILE_SCAN_INTERVAL;
+                    guidedAtUs = 0;
+                }
+
                 Rigidbody ourBody = null;
 
                 try
@@ -435,94 +450,119 @@ namespace VoiceWarningEditor
                     catch { }
                 }
 
-                // scan legacy missiles
-                try
+                if (runScan)
                 {
-                    var missiles = UnityEngine.Object.FindObjectsOfType<Missile>();
-                    if (missiles != null)
+                    // scan legacy missiles
+                    try
                     {
-                        for (int i = 0; i < missiles.Count; i++)
+                        var missiles = UnityEngine.Object.FindObjectsOfType<Missile>();
+                        if (missiles != null)
                         {
-                            var m = missiles[i];
-                            if (m == null || !m.launched || !m.IsGuiding || m.target == null)
-                                continue;
-
-                            bool targetingUs = ourBody != null && m.target == ourBody;
-
-                            // fallback: close + heading towards us
-                            if (!targetingUs)
+                            for (int i = 0; i < missiles.Count; i++)
                             {
-                                try
-                                {
-                                    float dist = Vector3.Distance(m.transform.position, craft.transform.position);
-                                    if (dist < 5000f)
-                                    {
-                                        Vector3 toUs = (craft.transform.position - m.transform.position).normalized;
-                                        if (Vector3.Dot(m.transform.forward, toUs) > 0.8f)
-                                            targetingUs = true;
-                                    }
-                                }
-                                catch { }
-                            }
+                                var m = missiles[i];
+                                if (m == null || !m.launched || !m.IsGuiding || m.target == null)
+                                    continue;
 
-                            if (targetingUs) guidedAtUs++;
+                                bool targetingUs = ourBody != null && m.target == ourBody;
+
+                                // fallback: close + heading towards us
+                                if (!targetingUs)
+                                {
+                                    try
+                                    {
+                                        float dist = Vector3.Distance(m.transform.position, craft.transform.position);
+                                        if (dist < 5000f)
+                                        {
+                                            Vector3 toUs = (craft.transform.position - m.transform.position).normalized;
+                                            if (Vector3.Dot(m.transform.forward, toUs) > 0.8f)
+                                                targetingUs = true;
+                                        }
+                                    }
+                                    catch { }
+                                }
+
+                                if (targetingUs) guidedAtUs++;
+                            }
                         }
                     }
-                }
-                catch { }
+                    catch { }
 
-                // scan proc missiles
-                try
-                {
-                    var procMissiles = UnityEngine.Object.FindObjectsOfType<ProcMissile>();
-                    if (procMissiles != null)
+                    // scan proc missiles
+                    try
                     {
-                        for (int i = 0; i < procMissiles.Count; i++)
+                        var procMissiles = UnityEngine.Object.FindObjectsOfType<ProcMissile>();
+                        if (procMissiles != null)
                         {
-                            var pm = procMissiles[i];
-                            if (pm == null || pm.IsUnguided) continue;
-
-                            Signature locked = null;
-                            try { locked = pm.Locked; } catch { continue; }
-                            if (locked == null) continue;
-
-                            bool targetingUs = _ourSignature != null && locked == _ourSignature;
-
-                            if (!targetingUs)
+                            for (int i = 0; i < procMissiles.Count; i++)
                             {
-                                try
-                                {
-                                    float dist = Vector3.Distance(pm.transform.position, craft.transform.position);
-                                    if (dist < 5000f)
-                                    {
-                                        Vector3 toUs = (craft.transform.position - pm.transform.position).normalized;
-                                        if (Vector3.Dot(pm.transform.forward, toUs) > 0.8f)
-                                            targetingUs = true;
-                                    }
-                                }
-                                catch { }
-                            }
+                                var pm = procMissiles[i];
+                                if (pm == null || pm.IsUnguided) continue;
 
-                            if (targetingUs) guidedAtUs++;
+                                Signature locked = null;
+                                try { locked = pm.Locked; } catch { continue; }
+                                if (locked == null) continue;
+
+                                bool targetingUs = _ourSignature != null && locked == _ourSignature;
+
+                                if (!targetingUs)
+                                {
+                                    try
+                                    {
+                                        float dist = Vector3.Distance(pm.transform.position, craft.transform.position);
+                                        if (dist < 5000f)
+                                        {
+                                            Vector3 toUs = (craft.transform.position - pm.transform.position).normalized;
+                                            if (Vector3.Dot(pm.transform.forward, toUs) > 0.8f)
+                                                targetingUs = true;
+                                        }
+                                    }
+                                    catch { }
+                                }
+
+                                if (targetingUs) guidedAtUs++;
+                            }
                         }
                     }
+                    catch { }
                 }
-                catch { }
 
                 if (guidedAtUs > 0)
                     _activeEvents.Add(WarningEvent.MissileIncoming);
 
-                if (guidedAtUs > 0 && !_missileAlarmPlaying)
-                {
-                    if (_suppressMissileAlarm)
-                        LoggerInstance.Msg("[Missile] Missile alarm suppressed (debug mode)");
-                    else
-                        StartMissileAlarm();
-                }
-                else if (guidedAtUs == 0 && _missileAlarmPlaying)
-                    StopMissileAlarm();
+                _missileThreatActive = guidedAtUs > 0;
 
                 _prevMissileCount = guidedAtUs;
+            }
+            catch { }
+        }
+
+        // launch loop has priority over lock loop
+        private void UpdateThreatLoopAudio()
+        {
+            try
+            {
+                if (_suppressMissileAlarm)
+                {
+                    if (_missileAlarmPlaying)
+                        StopMissileAlarm();
+                    return;
+                }
+
+                if (_missileThreatActive)
+                {
+                    StartThreatAlarm("missile_lauch_f18");
+                    return;
+                }
+
+                if (_radarLockActive)
+                {
+                    StartThreatAlarm("radar_lock_f18");
+                    return;
+                }
+
+                if (_missileAlarmPlaying)
+                    StopMissileAlarm();
             }
             catch { }
         }
@@ -575,45 +615,59 @@ namespace VoiceWarningEditor
                     try { isLocked = cmd.heatLocked; } catch { }
                 }
 
-                // fallback: sam sites nearby (use string Type lookup to avoid TypeLoadException on mismatched game versions)
+                // fallback: sam sites nearby (throttled; expensive world scan)
                 if (!isLocked)
                 {
                     try
                     {
-                        // scan all GameObjects and look for components named 'AISam' to avoid direct type references
-                        var gos = UnityEngine.Object.FindObjectsOfType<GameObject>();
-                        if (gos != null)
+                        float now = Time.realtimeSinceStartup;
+                        if (now >= _nextSamFallbackScanTime)
                         {
-                            for (int gi = 0; gi < gos.Length; gi++)
+                            _nextSamFallbackScanTime = now + SAM_SCAN_INTERVAL;
+                            _cachedSamFallbackLock = false;
+
+                            // scan all GameObjects and look for components named 'AISam' to avoid direct type references
+                            var gos = UnityEngine.Object.FindObjectsOfType<GameObject>();
+                            if (gos != null)
                             {
-                                var go = gos[gi];
-                                if (go == null) continue;
-                                try
+                                for (int gi = 0; gi < gos.Length; gi++)
                                 {
-                                    var comps = go.GetComponents<Component>();
-                                    if (comps == null) continue;
-                                    for (int ci = 0; ci < comps.Length; ci++)
+                                    var go = gos[gi];
+                                    if (go == null) continue;
+                                    try
                                     {
-                                        var comp = comps[ci];
-                                        if (comp == null) continue;
-                                        string tname = null;
-                                        try { tname = comp.GetType().Name; } catch { }
-                                        if (string.IsNullOrEmpty(tname)) continue;
-                                        if (tname.Equals("AISam", StringComparison.Ordinal) || tname.EndsWith("AISam", StringComparison.Ordinal))
+                                        var comps = go.GetComponents<Component>();
+                                        if (comps == null) continue;
+                                        for (int ci = 0; ci < comps.Length; ci++)
                                         {
+                                            var comp = comps[ci];
+                                            if (comp == null) continue;
+                                            string tname = null;
+                                            try { tname = comp.GetType().Name; } catch { }
+                                            if (string.IsNullOrEmpty(tname)) continue;
+                                            if (!(tname.Equals("AISam", StringComparison.Ordinal) || tname.EndsWith("AISam", StringComparison.Ordinal)))
+                                                continue;
+
                                             try
                                             {
                                                 float dist = Vector3.Distance(go.transform.position, craft.transform.position);
-                                                if (dist < 20000f) { isLocked = true; break; }
+                                                if (dist < 20000f)
+                                                {
+                                                    _cachedSamFallbackLock = true;
+                                                    break;
+                                                }
                                             }
                                             catch { }
                                         }
+                                        if (_cachedSamFallbackLock) break;
                                     }
-                                    if (isLocked) break;
+                                    catch { }
                                 }
-                                catch { }
                             }
                         }
+
+                        if (_cachedSamFallbackLock)
+                            isLocked = true;
                     }
                     catch { }
                 }
@@ -622,7 +676,9 @@ namespace VoiceWarningEditor
                 if (isLocked && !_wasRadarLocked)
                     _activeEvents.Add(WarningEvent.RadarLock);
 
+                _radarLockActive = isLocked;
                 _wasRadarLocked = isLocked;
+                UpdateThreatLoopAudio();
             }
             catch { }
         }
