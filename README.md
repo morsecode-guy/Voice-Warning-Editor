@@ -29,11 +29,6 @@ Adds a fully programmable voice warning system to the game — F/A-18 style "Bit
 - **Craft Editor integration** — dedicated panel on the mode bar with the game's own UI style
 - Audio routed through `winmm.dll` (PlaySound) so Discord/OBS can capture it via Wine/Proton
 
-## Changelog
-
-- Now works with the most recent Flyout update.
-- VWE audio now slaves to Master Volume.
-
 ## Requirements
 
 - [Flyout](https://store.steampowered.com/app/777390/Flyout/) (tested on v0.225 & 0.2316)
